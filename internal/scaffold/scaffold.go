@@ -17,7 +17,6 @@ import (
 
 var githubShorthand = regexp.MustCompile(`^github\.com/([^/]+)/([^/]+)/(.+)$`)
 
-// Regex to find {{arg N}} usage in templates
 var argPattern = regexp.MustCompile(`{{\s*arg\s+(\d+)\s*}}`)
 
 type DSL struct {
@@ -122,7 +121,6 @@ func loadTemplate(templateFile string) ([]byte, error) {
 	return data, nil
 }
 
-// findAllArgIndices returns all unique arg indices found in a string
 func findAllArgIndices(s string) []int {
 	matches := argPattern.FindAllStringSubmatch(s, -1)
 	indexSet := make(map[int]struct{})
@@ -135,7 +133,7 @@ func findAllArgIndices(s string) []int {
 	for idx := range indexSet {
 		indices = append(indices, idx)
 	}
-	// Sort ascending
+
 	for i := 0; i < len(indices); i++ {
 		for j := i + 1; j < len(indices); j++ {
 			if indices[j] < indices[i] {
@@ -146,7 +144,6 @@ func findAllArgIndices(s string) []int {
 	return indices
 }
 
-// allArgIndicesInDSL returns all unique arg indices used in entire DSL
 func allArgIndicesInDSL(dsl DSL) []int {
 	indexSet := make(map[int]struct{})
 
@@ -182,7 +179,7 @@ func allArgIndicesInDSL(dsl DSL) []int {
 	for idx := range indexSet {
 		indices = append(indices, idx)
 	}
-	// Sort ascending
+
 	for i := 0; i < len(indices); i++ {
 		for j := i + 1; j < len(indices); j++ {
 			if indices[j] < indices[i] {
@@ -248,7 +245,6 @@ func findMaxArgIndex(s string) int {
 	return max
 }
 
-// mapArgToVarNames returns a map[argIndex][]varNames indicating which variables use which arg indices
 func mapArgToVarNames(vars map[string]string) map[int][]string {
 	m := make(map[int][]string)
 	for varName, val := range vars {
@@ -273,7 +269,6 @@ func Run(templateFile string, args []string) error {
 
 	argToVars := mapArgToVarNames(dsl.Vars)
 
-	// Validate arguments
 	argIndices := allArgIndicesInDSL(dsl)
 	var missing []int
 	for _, idx := range argIndices {
