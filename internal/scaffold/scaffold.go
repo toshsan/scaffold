@@ -122,32 +122,85 @@ func loadTemplate(templateFile string) ([]byte, error) {
 	return data, nil
 }
 
-// findMaxArgIndex scans a string and returns the max arg index used, or -1 if none found
-func findMaxArgIndex(s string) int {
+// findAllArgIndices returns all unique arg indices found in a string
+func findAllArgIndices(s string) []int {
 	matches := argPattern.FindAllStringSubmatch(s, -1)
-	max := -1
+	indexSet := make(map[int]struct{})
 	for _, m := range matches {
 		var idx int
 		fmt.Sscanf(m[1], "%d", &idx)
-		if idx > max {
-			max = idx
+		indexSet[idx] = struct{}{}
+	}
+	var indices []int
+	for idx := range indexSet {
+		indices = append(indices, idx)
+	}
+	// Sort ascending
+	for i := 0; i < len(indices); i++ {
+		for j := i + 1; j < len(indices); j++ {
+			if indices[j] < indices[i] {
+				indices[i], indices[j] = indices[j], indices[i]
+			}
 		}
 	}
-	return max
+	return indices
 }
 
-// maxArgInDSL scans all relevant DSL fields and returns the max arg index used
+// allArgIndicesInDSL returns all unique arg indices used in entire DSL
+func allArgIndicesInDSL(dsl DSL) []int {
+	indexSet := make(map[int]struct{})
+
+	checkString := func(s string) {
+		for _, idx := range findAllArgIndices(s) {
+			indexSet[idx] = struct{}{}
+		}
+	}
+
+	for _, v := range dsl.Vars {
+		checkString(v)
+	}
+	for _, step := range dsl.Steps {
+		if step.Mkdir != "" {
+			checkString(step.Mkdir)
+		}
+		if step.WriteFile != nil {
+			checkString(step.WriteFile.Path)
+			checkString(step.WriteFile.Content)
+		}
+		if step.Run != nil {
+			checkString(step.Run.Cmd)
+			if step.Run.Dir != "" {
+				checkString(step.Run.Dir)
+			}
+		}
+		if step.When != "" {
+			checkString(step.When)
+		}
+	}
+
+	var indices []int
+	for idx := range indexSet {
+		indices = append(indices, idx)
+	}
+	// Sort ascending
+	for i := 0; i < len(indices); i++ {
+		for j := i + 1; j < len(indices); j++ {
+			if indices[j] < indices[i] {
+				indices[i], indices[j] = indices[j], indices[i]
+			}
+		}
+	}
+	return indices
+}
+
 func maxArgInDSL(dsl DSL) int {
 	maxIdx := -1
 
-	// Check vars
 	for _, v := range dsl.Vars {
 		if idx := findMaxArgIndex(v); idx > maxIdx {
 			maxIdx = idx
 		}
 	}
-
-	// Check steps
 	for _, step := range dsl.Steps {
 		if step.Mkdir != "" {
 			if idx := findMaxArgIndex(step.Mkdir); idx > maxIdx {
@@ -182,6 +235,31 @@ func maxArgInDSL(dsl DSL) int {
 	return maxIdx
 }
 
+func findMaxArgIndex(s string) int {
+	matches := argPattern.FindAllStringSubmatch(s, -1)
+	max := -1
+	for _, m := range matches {
+		var idx int
+		fmt.Sscanf(m[1], "%d", &idx)
+		if idx > max {
+			max = idx
+		}
+	}
+	return max
+}
+
+// mapArgToVarNames returns a map[argIndex][]varNames indicating which variables use which arg indices
+func mapArgToVarNames(vars map[string]string) map[int][]string {
+	m := make(map[int][]string)
+	for varName, val := range vars {
+		indices := findAllArgIndices(val)
+		for _, idx := range indices {
+			m[idx] = append(m[idx], varName)
+		}
+	}
+	return m
+}
+
 func Run(templateFile string, args []string) error {
 	content, err := loadTemplate(templateFile)
 	if err != nil {
@@ -193,10 +271,28 @@ func Run(templateFile string, args []string) error {
 		return fmt.Errorf("failed to parse DSL yaml: %w", err)
 	}
 
-	// Validate arg count before running
-	maxArg := maxArgInDSL(dsl)
-	if maxArg >= 0 && len(args) <= maxArg {
-		return fmt.Errorf("not enough arguments: template requires at least %d argument(s), got %d", maxArg+1, len(args))
+	argToVars := mapArgToVarNames(dsl.Vars)
+
+	// Validate arguments
+	argIndices := allArgIndicesInDSL(dsl)
+	var missing []int
+	for _, idx := range argIndices {
+		if idx >= len(args) {
+			missing = append(missing, idx)
+		}
+	}
+	if len(missing) > 0 {
+		var missingStr []string
+		for _, idx := range missing {
+			if vars, ok := argToVars[idx]; ok && len(vars) > 0 {
+				missingStr = append(missingStr, fmt.Sprintf("arg #%d (used in vars: %s)", idx, strings.Join(vars, ", ")))
+			} else {
+				missingStr = append(missingStr, fmt.Sprintf("arg #%d", idx))
+			}
+		}
+		return fmt.Errorf(
+			"missing argument(s): %s; template requires at least %d argument(s), got %d",
+			strings.Join(missingStr, ", "), maxArgInDSL(dsl)+1, len(args))
 	}
 
 	data := Data{
