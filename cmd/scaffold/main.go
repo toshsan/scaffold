@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/toshan/scaffold/internal/scaffold"
+	"github.com/toshsan/scaffold/internal/scaffold"
 )
 
 func main() {

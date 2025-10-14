@@ -1,4 +1,4 @@
-module github.com/toshan/scaffold
+module github.com/toshsan/scaffold
 
 go 1.25.2
 
