@@ -17,6 +17,9 @@ import (
 
 var githubShorthand = regexp.MustCompile(`^github\.com/([^/]+)/([^/]+)/(.+)$`)
 
+// Regex to find {{arg N}} usage in templates
+var argPattern = regexp.MustCompile(`{{\s*arg\s+(\d+)\s*}}`)
+
 type DSL struct {
 	Vars  map[string]string `yaml:"vars"`
 	Steps []Step            `yaml:"steps"`
@@ -119,6 +122,66 @@ func loadTemplate(templateFile string) ([]byte, error) {
 	return data, nil
 }
 
+// findMaxArgIndex scans a string and returns the max arg index used, or -1 if none found
+func findMaxArgIndex(s string) int {
+	matches := argPattern.FindAllStringSubmatch(s, -1)
+	max := -1
+	for _, m := range matches {
+		var idx int
+		fmt.Sscanf(m[1], "%d", &idx)
+		if idx > max {
+			max = idx
+		}
+	}
+	return max
+}
+
+// maxArgInDSL scans all relevant DSL fields and returns the max arg index used
+func maxArgInDSL(dsl DSL) int {
+	maxIdx := -1
+
+	// Check vars
+	for _, v := range dsl.Vars {
+		if idx := findMaxArgIndex(v); idx > maxIdx {
+			maxIdx = idx
+		}
+	}
+
+	// Check steps
+	for _, step := range dsl.Steps {
+		if step.Mkdir != "" {
+			if idx := findMaxArgIndex(step.Mkdir); idx > maxIdx {
+				maxIdx = idx
+			}
+		}
+		if step.WriteFile != nil {
+			if idx := findMaxArgIndex(step.WriteFile.Path); idx > maxIdx {
+				maxIdx = idx
+			}
+			if idx := findMaxArgIndex(step.WriteFile.Content); idx > maxIdx {
+				maxIdx = idx
+			}
+		}
+		if step.Run != nil {
+			if idx := findMaxArgIndex(step.Run.Cmd); idx > maxIdx {
+				maxIdx = idx
+			}
+			if step.Run.Dir != "" {
+				if idx := findMaxArgIndex(step.Run.Dir); idx > maxIdx {
+					maxIdx = idx
+				}
+			}
+		}
+		if step.When != "" {
+			if idx := findMaxArgIndex(step.When); idx > maxIdx {
+				maxIdx = idx
+			}
+		}
+	}
+
+	return maxIdx
+}
+
 func Run(templateFile string, args []string) error {
 	content, err := loadTemplate(templateFile)
 	if err != nil {
@@ -128,6 +191,12 @@ func Run(templateFile string, args []string) error {
 	var dsl DSL
 	if err := yaml.Unmarshal(content, &dsl); err != nil {
 		return fmt.Errorf("failed to parse DSL yaml: %w", err)
+	}
+
+	// Validate arg count before running
+	maxArg := maxArgInDSL(dsl)
+	if maxArg >= 0 && len(args) <= maxArg {
+		return fmt.Errorf("not enough arguments: template requires at least %d argument(s), got %d", maxArg+1, len(args))
 	}
 
 	data := Data{
