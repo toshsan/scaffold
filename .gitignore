@@ -1,0 +1,32 @@
+# Binaries
+/scaffold
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Build output
+/build/
+/bin/
+/out/
+
+# Vendor directory (if you vendor dependencies)
+/vendor/
+
+# Go modules
+/go.sum
+
+# Editor files
+*.swp
+*.swo
+*.DS_Store
+.idea/
+.vscode/
+
+# Logs and temp files
+*.log
+*.tmp
+
+# Test binaries
+*.test

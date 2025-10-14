@@ -1,0 +1,27 @@
+vars:
+  project: "{{arg 0}}"
+  author: "{{arg 1}}"
+  EnableGit: "true"
+
+steps:
+  - mkdir: "{{.Var.project}}"
+
+  - write_file:
+      path: "{{.Var.project}}/main.go"
+      content: |
+        package main
+
+        import "fmt"
+
+        func main() {
+            fmt.Println("Hello, {{.Var.author}}!")
+        }
+
+  - run:
+      cmd: "go mod init github.com/{{.Var.author}}/{{.Var.project}}"
+      dir: "{{.Var.project}}"
+
+  - run:
+      cmd: "git init"
+      dir: "{{.Var.project}}"
+      when: "{{.Var.EnableGit}}"
